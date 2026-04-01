@@ -1,5 +1,5 @@
 build:
-	go build -o bin/url-shortener ./cmd/api
+	go build -o bin/app ./cmd/api
 
 lint:
 	golangci-lint run ./...
