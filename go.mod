@@ -2,7 +2,15 @@ module url-shortener
 
 go 1.26
 
-require github.com/gin-gonic/gin v1.12.0
+require (
+	github.com/caarlos0/env/v11 v11.4.0
+	github.com/docker/docker v28.5.2+incompatible
+	github.com/gin-gonic/gin v1.12.0
+	github.com/google/uuid v1.6.0
+	github.com/jackc/pgx/v5 v5.9.1
+	github.com/joho/godotenv v1.5.1
+	github.com/pashagolub/pgxmock/v4 v4.9.0
+)
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -25,7 +33,9 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/gohugoio/hugo v0.149.1 // indirect
-	github.com/joho/godotenv v1.5.1 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
@@ -46,6 +56,7 @@ require (
 	golang.org/x/arch v0.22.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
