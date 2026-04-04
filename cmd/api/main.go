@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"embed"
 	"log/slog"
 	"os"
 	"url-shortener/config"
 	"url-shortener/db"
 	"url-shortener/handlers"
 )
+
+//go:embed db/migrations/*sql
+var embedMigrations embed.FS
 
 func main() {
 	cfg, err := config.Load()
@@ -29,7 +33,12 @@ func main() {
 	}
 	defer pool.Close()
 
-	err = pool.Ping(ctx)
+	if err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = pool.Ping()
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)

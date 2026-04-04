@@ -2,17 +2,16 @@ package handlers
 
 import (
 	"bytes"
-	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-	"url-shortener/internal/db"
+	db "url-shortener/db/generated"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
-	"github.com/pashagolub/pgxmock/v4"
 )
 
 func assertJSONFields(t *testing.T, body string, expected map[string]any) {
@@ -30,7 +29,7 @@ func assertJSONFields(t *testing.T, body string, expected map[string]any) {
 	}
 }
 
-func setupTestRouterWithMock(t *testing.T) (*gin.Engine, pgxmock.PgxConnIface) {
+func setupTestRouterWithMock(t *testing.T) (*gin.Engine, sqlmock.Sqlmock) {
 	t.Helper()
 
 	t.Setenv("DATABASE_URL", "postgres://test:test@localhost:5432/test")
@@ -38,19 +37,19 @@ func setupTestRouterWithMock(t *testing.T) (*gin.Engine, pgxmock.PgxConnIface) {
 
 	gin.SetMode(gin.TestMode)
 
-	mock, err := pgxmock.NewConn()
+	dbConn, mock, err := sqlmock.New()
 	if err != nil {
-		t.Fatalf("failed to create pgx mock: %v", err)
+		t.Fatalf("failed to create sql mock: %v", err)
 	}
 
-	h := &LinkHandler{Queries: db.New(mock)}
+	h := &LinkHandler{Queries: db.New(dbConn)}
 	r := gin.New()
 	api := r.Group("/api")
 	links := api.Group("/links")
 	h.Register(links)
 
 	t.Cleanup(func() {
-		_ = mock.Close(context.Background())
+		_ = dbConn.Close()
 	})
 
 	return r, mock
@@ -61,15 +60,15 @@ func TestCreateLink(t *testing.T) {
 		name           string
 		body           string
 		expectedStatus int
-		setup          func(mock pgxmock.PgxConnIface)
+		setup          func(mock sqlmock.Sqlmock)
 		assertBody     func(t *testing.T, body string)
 	}{
 		{
 			name:           "create link success",
 			body:           `{"original_url":"https://example.com","short_name":"hexlet"}`,
 			expectedStatus: http.StatusCreated,
-			setup: func(mock pgxmock.PgxConnIface) {
-				rows := pgxmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
+			setup: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
 					AddRow(int64(1), "https://example.com", "hexlet", "https://short.local/hexlet", time.Now())
 				mock.ExpectQuery("INSERT INTO links").
 					WithArgs("https://example.com", "hexlet", "https://short.local/hexlet").
@@ -145,15 +144,15 @@ func TestGetLink(t *testing.T) {
 		name           string
 		url            string
 		expectedStatus int
-		setup          func(mock pgxmock.PgxConnIface)
+		setup          func(mock sqlmock.Sqlmock)
 		assertBody     func(t *testing.T, body string)
 	}{
 		{
 			name:           "get link success",
 			url:            "/api/links/1",
 			expectedStatus: http.StatusOK,
-			setup: func(mock pgxmock.PgxConnIface) {
-				rows := pgxmock.NewRows([]string{"id", "original_url", "short_name", "short_url"}).
+			setup: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url"}).
 					AddRow(int64(1), "https://example.com", "hexlet", "https://short.local/hexlet")
 				mock.ExpectQuery("SELECT(.*)FROM links").WithArgs(int64(1)).WillReturnRows(rows)
 			},
@@ -171,7 +170,7 @@ func TestGetLink(t *testing.T) {
 			name:           "get link not found",
 			url:            "/api/links/999",
 			expectedStatus: http.StatusNotFound,
-			setup: func(mock pgxmock.PgxConnIface) {
+			setup: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("SELECT(.*)FROM links").WithArgs(int64(999)).WillReturnError(sql.ErrNoRows)
 			},
 		},
@@ -218,14 +217,14 @@ func TestListLinks(t *testing.T) {
 	tests := []struct {
 		name           string
 		expectedStatus int
-		setup          func(mock pgxmock.PgxConnIface)
+		setup          func(mock sqlmock.Sqlmock)
 		assertBody     func(t *testing.T, body string)
 	}{
 		{
 			name:           "list links empty",
 			expectedStatus: http.StatusOK,
-			setup: func(mock pgxmock.PgxConnIface) {
-				rows := pgxmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"})
+			setup: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"})
 				mock.ExpectQuery("SELECT(.*)FROM links").WillReturnRows(rows)
 			},
 			assertBody: func(t *testing.T, body string) {
@@ -238,8 +237,8 @@ func TestListLinks(t *testing.T) {
 		{
 			name:           "list links with records",
 			expectedStatus: http.StatusOK,
-			setup: func(mock pgxmock.PgxConnIface) {
-				rows := pgxmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
+			setup: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
 					AddRow(int64(2), "https://b.example", "b", "https://short.local/b", time.Now()).
 					AddRow(int64(1), "https://a.example", "a", "https://short.local/a", time.Now())
 				mock.ExpectQuery("SELECT(.*)FROM links").WillReturnRows(rows)
@@ -294,7 +293,7 @@ func TestUpdateLink(t *testing.T) {
 		url            string
 		body           string
 		expectedStatus int
-		setup          func(mock pgxmock.PgxConnIface)
+		setup          func(mock sqlmock.Sqlmock)
 		assertBody     func(t *testing.T, body string)
 	}{
 		{
@@ -302,8 +301,8 @@ func TestUpdateLink(t *testing.T) {
 			url:            "/api/links/1",
 			body:           `{"original_url":"https://example.com/new","short_name":"new"}`,
 			expectedStatus: http.StatusOK,
-			setup: func(mock pgxmock.PgxConnIface) {
-				rows := pgxmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
+			setup: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
 					AddRow(int64(1), "https://example.com/new", "new", "https://short.local/new", time.Now())
 				mock.ExpectQuery("UPDATE links").
 					WithArgs(int64(1), "https://example.com/new", "new", "https://short.local/new").
@@ -336,7 +335,7 @@ func TestUpdateLink(t *testing.T) {
 			url:            "/api/links/999",
 			body:           `{"original_url":"https://example.com/new","short_name":"new"}`,
 			expectedStatus: http.StatusNotFound,
-			setup: func(mock pgxmock.PgxConnIface) {
+			setup: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("UPDATE links").
 					WithArgs(int64(999), "https://example.com/new", "new", "https://short.local/new").
 					WillReturnError(sql.ErrNoRows)
@@ -377,14 +376,14 @@ func TestDeleteLink(t *testing.T) {
 		name           string
 		url            string
 		expectedStatus int
-		setup          func(mock pgxmock.PgxConnIface)
+		setup          func(mock sqlmock.Sqlmock)
 	}{
 		{
 			name:           "delete link success",
 			url:            "/api/links/1",
 			expectedStatus: http.StatusNoContent,
-			setup: func(mock pgxmock.PgxConnIface) {
-				mock.ExpectExec("DELETE FROM links").WithArgs(int64(1)).WillReturnResult(pgxmock.NewResult("DELETE", 1))
+			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec("DELETE FROM links").WithArgs(int64(1)).WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
 		{

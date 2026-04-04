@@ -1,20 +1,19 @@
 package handlers
 
 import (
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
-
-	"url-shortener/internal/db"
+	db "url-shortener/db/generated"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func SetupRouter(pool *pgxpool.Pool) *gin.Engine {
-	queries := db.New(pool)
+func SetupRouter(database *sql.DB) *gin.Engine {
+	queries := db.New(database)
 	h := NewLinksHandler(queries)
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))

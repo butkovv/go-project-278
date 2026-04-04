@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"url-shortener/config"
-	"url-shortener/internal/db"
+	db "url-shortener/db/generated"
 
 	"github.com/docker/docker/pkg/namesgenerator"
 	"github.com/gin-gonic/gin"
