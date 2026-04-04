@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
@@ -28,5 +29,5 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) Addr() string {
-	return fmt.Sprintf("%s:%s", c.AppHost, c.AppPort)
+	return fmt.Sprintf(":%s", strings.TrimSpace(c.AppPort))
 }
