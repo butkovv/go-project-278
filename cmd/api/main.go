@@ -2,16 +2,15 @@ package main
 
 import (
 	"context"
-	"embed"
 	"log/slog"
 	"os"
+	migrations "url-shortener"
 	"url-shortener/config"
 	"url-shortener/db"
 	"url-shortener/handlers"
-)
 
-//go:embed db/migrations/*sql
-var embedMigrations embed.FS
+	"github.com/pressly/goose/v3"
+)
 
 func main() {
 	cfg, err := config.Load()
@@ -39,6 +38,14 @@ func main() {
 	}
 
 	err = pool.Ping()
+	if err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
+
+	goose.SetBaseFS(migrations.EmbedMigrations)
+
+	err = goose.Up(pool, "db/migrations")
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
