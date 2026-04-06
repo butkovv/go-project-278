@@ -73,11 +73,23 @@ func (h *LinkHandler) Get(c *gin.Context) {
 }
 
 func (h *LinkHandler) List(c *gin.Context) {
-	links, err := h.Queries.ListLinks(c)
+	pagination := h.getPaginationParams(c)
+	links, err := h.Queries.ListLinks(c, pagination)
 	if err != nil {
 		handleDBError(c, err)
 		return
 	}
+	total, err := h.Queries.GetTotalCount(c)
+	if err != nil {
+		handleDBError(c, err)
+		return
+	}
+	endRange := pagination.Limit + pagination.Offset
+	if total < int64(endRange) {
+		endRange = int32(total)
+	}
+	contentRange := fmt.Sprintf("links %d-%d/%d", pagination.Offset, endRange, total)
+	c.Header("Content-Range", contentRange)
 	c.JSON(http.StatusOK, links)
 }
 
@@ -150,4 +162,26 @@ func (h *LinkHandler) parseID(c *gin.Context) (int64, error) {
 		return 0, ErrorInvalidID
 	}
 	return id, nil
+}
+
+func (h *LinkHandler) getPaginationParams(c *gin.Context) db.ListLinksParams {
+	pagination := db.ListLinksParams{Offset: 0, Limit: 10}
+	rangeString := c.DefaultQuery("range", "")
+	trimmedRangeString := strings.Trim(rangeString, "[]")
+	parts := strings.Split(trimmedRangeString, ",")
+	if len(parts) == 2 {
+		start, err := strconv.Atoi(parts[0])
+		if err != nil {
+			handleDBError(c, err)
+			return pagination
+		}
+		end, err := strconv.Atoi(parts[1])
+		if err != nil {
+			handleDBError(c, err)
+			return pagination
+		}
+		pagination.Offset = int32(start)
+		pagination.Limit = int32(end - start)
+	}
+	return pagination
 }

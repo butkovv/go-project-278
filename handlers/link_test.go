@@ -216,16 +216,21 @@ func TestGetLink(t *testing.T) {
 func TestListLinks(t *testing.T) {
 	tests := []struct {
 		name           string
+		url            string
 		expectedStatus int
+		expectedRange  string
 		setup          func(mock sqlmock.Sqlmock)
 		assertBody     func(t *testing.T, body string)
 	}{
 		{
 			name:           "list links empty",
+			url:            "/api/links",
 			expectedStatus: http.StatusOK,
+			expectedRange:  "links 0-0/0",
 			setup: func(mock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"})
-				mock.ExpectQuery("SELECT(.*)FROM links").WillReturnRows(rows)
+				mock.ExpectQuery("SELECT(.*)FROM links").WithArgs(int32(10), int32(0)).WillReturnRows(rows)
+				mock.ExpectQuery(`SELECT count\(\*\) AS total_count FROM links`).WillReturnRows(sqlmock.NewRows([]string{"total_count"}).AddRow(int64(0)))
 			},
 			assertBody: func(t *testing.T, body string) {
 				t.Helper()
@@ -236,12 +241,15 @@ func TestListLinks(t *testing.T) {
 		},
 		{
 			name:           "list links with records",
+			url:            "/api/links",
 			expectedStatus: http.StatusOK,
+			expectedRange:  "links 0-2/2",
 			setup: func(mock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
 					AddRow(int64(2), "https://b.example", "b", "https://short.local/b", time.Now()).
 					AddRow(int64(1), "https://a.example", "a", "https://short.local/a", time.Now())
-				mock.ExpectQuery("SELECT(.*)FROM links").WillReturnRows(rows)
+				mock.ExpectQuery("SELECT(.*)FROM links").WithArgs(int32(10), int32(0)).WillReturnRows(rows)
+				mock.ExpectQuery(`SELECT count\(\*\) AS total_count FROM links`).WillReturnRows(sqlmock.NewRows([]string{"total_count"}).AddRow(int64(2)))
 			},
 			assertBody: func(t *testing.T, body string) {
 				t.Helper()
@@ -260,6 +268,32 @@ func TestListLinks(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:           "list links with custom pagination range",
+			url:            "/api/links?range=[1,3]",
+			expectedStatus: http.StatusOK,
+			expectedRange:  "links 1-3/5",
+			setup: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
+					AddRow(int64(4), "https://d.example", "d", "https://short.local/d", time.Now()).
+					AddRow(int64(3), "https://c.example", "c", "https://short.local/c", time.Now())
+				mock.ExpectQuery("SELECT(.*)FROM links").WithArgs(int32(2), int32(1)).WillReturnRows(rows)
+				mock.ExpectQuery(`SELECT count\(\*\) AS total_count FROM links`).WillReturnRows(sqlmock.NewRows([]string{"total_count"}).AddRow(int64(5)))
+			},
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				var payload []map[string]any
+				if err := json.Unmarshal([]byte(body), &payload); err != nil {
+					t.Fatalf("failed to decode response body: %v", err)
+				}
+				if len(payload) != 2 {
+					t.Fatalf("expected 2 links, got %d", len(payload))
+				}
+				if payload[0]["id"] != float64(4) || payload[1]["id"] != float64(3) {
+					t.Fatalf("unexpected pagination payload: %v", payload)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -268,7 +302,7 @@ func TestListLinks(t *testing.T) {
 
 			tt.setup(mock)
 
-			req, _ := http.NewRequest(http.MethodGet, "/api/links", nil)
+			req, _ := http.NewRequest(http.MethodGet, tt.url, nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
@@ -278,6 +312,10 @@ func TestListLinks(t *testing.T) {
 
 			if tt.assertBody != nil {
 				tt.assertBody(t, w.Body.String())
+			}
+
+			if w.Header().Get("Content-Range") != tt.expectedRange {
+				t.Fatalf("expected Content-Range %q, got %q", tt.expectedRange, w.Header().Get("Content-Range"))
 			}
 
 			if err := mock.ExpectationsWereMet(); err != nil {

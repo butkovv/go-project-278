@@ -73,6 +73,17 @@ func (q *Queries) GetLinkById(ctx context.Context, id int64) (GetLinkByIdRow, er
 	return i, err
 }
 
+const getTotalCount = `-- name: GetTotalCount :one
+SELECT count(*) AS total_count FROM links
+`
+
+func (q *Queries) GetTotalCount(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getTotalCount)
+	var total_count int64
+	err := row.Scan(&total_count)
+	return total_count, err
+}
+
 const listLinks = `-- name: ListLinks :many
 SELECT
   id,
@@ -82,10 +93,16 @@ SELECT
   created_at
 FROM links
 ORDER BY id DESC
+LIMIT $1 OFFSET $2
 `
 
-func (q *Queries) ListLinks(ctx context.Context) ([]Link, error) {
-	rows, err := q.db.QueryContext(ctx, listLinks)
+type ListLinksParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) ListLinks(ctx context.Context, arg ListLinksParams) ([]Link, error) {
+	rows, err := q.db.QueryContext(ctx, listLinks, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
