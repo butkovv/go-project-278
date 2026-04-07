@@ -1,0 +1,12 @@
+{
+  "scripts": {
+    "frontend:dev": "CHOKIDAR_USEPOLLING=true CHOKIDAR_INTERVAL=1000 npm --prefix ./node_modules/@hexlet/project-url-shortener-frontend run dev",
+    "frontend:preview": "npm --prefix ./node_modules/@hexlet/project-url-shortener-frontend run preview"
+  },
+  "dependencies": {
+    "@hexlet/project-url-shortener-frontend": "^1.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
