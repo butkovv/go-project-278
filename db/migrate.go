@@ -29,16 +29,19 @@ func DefaultMigrationOptions() *MigrationOptions {
 }
 
 func openDB(opts *MigrationOptions) (*sql.DB, error) {
-	goose.SetDialect(opts.Dialect)
+	err := goose.SetDialect(opts.Dialect)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set goose dialect: %w", err)
+	}
+
+	databaseURL := opts.DatabaseURL
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Printf("Warning: unable to get config: %v\n", err)
+	} else if cfg.DatabaseUrl != "" {
+		databaseURL = cfg.DatabaseUrl
 	}
-	databaseURL := cfg.DatabaseUrl
-	if databaseURL != "" {
-		opts.DatabaseURL = databaseURL
-	}
-	db, err := sql.Open("pgx", opts.DatabaseURL)
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open DB: %w", err)
 	}
@@ -59,7 +62,11 @@ func MigrateUp(opts *MigrationOptions) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close DB: %v\n", closeErr)
+		}
+	}()
 
 	return goose.Up(db, opts.MigrationsDir)
 }
@@ -73,7 +80,11 @@ func MigrateDown(opts *MigrationOptions) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close DB: %v\n", closeErr)
+		}
+	}()
 
 	return goose.Down(db, opts.MigrationsDir)
 }
@@ -87,7 +98,11 @@ func MigrateStatus(opts *MigrationOptions) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close DB: %v\n", closeErr)
+		}
+	}()
 
 	return goose.Status(db, opts.MigrationsDir)
 }
@@ -101,7 +116,11 @@ func MigrateReset(opts *MigrationOptions) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close DB: %v\n", closeErr)
+		}
+	}()
 
 	err = goose.DownTo(db, opts.MigrationsDir, 0)
 	if err != nil {

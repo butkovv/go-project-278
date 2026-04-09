@@ -70,17 +70,3 @@ func internalServerError(c *gin.Context, err error) {
 		"message": err.Error(),
 	})
 }
-
-func conflict(c *gin.Context, err error) {
-	c.JSON(http.StatusConflict, gin.H{
-		"error":   "Conflict",
-		"message": err.Error(),
-	})
-}
-
-func unprocessableEntity(c *gin.Context, err error) {
-	c.JSON(http.StatusUnprocessableEntity, gin.H{
-		"error":   "Unprocessable Entity",
-		"message": err.Error(),
-	})
-}

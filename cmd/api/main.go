@@ -30,12 +30,12 @@ func main() {
 		slog.Error(err.Error())
 		os.Exit(1)
 	}
-	defer pool.Close()
-
-	if err != nil {
-		slog.Error(err.Error())
-		os.Exit(1)
-	}
+	defer func() {
+		err := pool.Close()
+		if err != nil {
+			slog.Error("failed to close database connection", "error", err)
+		}
+	}()
 
 	err = pool.Ping()
 	if err != nil {
