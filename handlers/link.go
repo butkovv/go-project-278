@@ -47,7 +47,7 @@ func (h *LinkHandler) Create(c *gin.Context) {
 	}
 	params.OriginalUrl = input.OriginalUrl
 	params.ShortName = input.ShortName
-	params.ShortUrl = fmt.Sprintf("%s/%s", cfg.AppHost, params.ShortName)
+	params.ShortUrl = fmt.Sprintf("%s/r/%s", cfg.AppHost, params.ShortName)
 	fmt.Print(params)
 	link, err := h.Queries.CreateLink(c, params)
 	if err != nil {
@@ -79,7 +79,7 @@ func (h *LinkHandler) List(c *gin.Context) {
 		handleDBError(c, err)
 		return
 	}
-	total, err := h.Queries.GetTotalCount(c)
+	total, err := h.Queries.GetTotalLinkCount(c)
 	if err != nil {
 		handleDBError(c, err)
 		return
@@ -114,7 +114,7 @@ func (h *LinkHandler) Update(c *gin.Context) {
 	params.ID = id
 	params.OriginalUrl = input.OriginalUrl
 	params.ShortName = input.ShortName
-	params.ShortUrl = fmt.Sprintf("%s/%s", cfg.AppHost, params.ShortName)
+	params.ShortUrl = fmt.Sprintf("%s/r/%s", cfg.AppHost, params.ShortName)
 	link, err := h.Queries.UpdateLink(c, params)
 	if err != nil {
 		handleDBError(c, err)

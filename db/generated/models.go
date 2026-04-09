@@ -5,13 +5,22 @@
 package db
 
 import (
-	"database/sql"
+	"time"
 )
 
 type Link struct {
-	ID          int64        `json:"id"`
-	OriginalUrl string       `json:"original_url"`
-	ShortName   string       `json:"short_name"`
-	ShortUrl    string       `json:"short_url"`
-	CreatedAt   sql.NullTime `json:"created_at"`
+	ID          int64     `json:"id"`
+	OriginalUrl string    `json:"original_url"`
+	ShortName   string    `json:"short_name"`
+	ShortUrl    string    `json:"short_url"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type LinkVisit struct {
+	ID        int64     `json:"id"`
+	LinkID    int64     `json:"link_id"`
+	Ip        string    `json:"ip"`
+	UserAgent string    `json:"user_agent"`
+	Status    int32     `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
 }

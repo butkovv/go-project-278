@@ -9,7 +9,7 @@ FROM links
 ORDER BY id DESC
 LIMIT $1 OFFSET $2;
 
--- name: GetTotalCount :one
+-- name: GetTotalLinkCount :one
 SELECT count(*) AS total_count FROM links;
 
 -- name: CreateLink :one
@@ -22,9 +22,20 @@ SELECT
   id,
   original_url,
   short_name,
-  short_url
+  short_url,
+  created_at
 FROM links
 WHERE id = $1;
+
+-- name: GetLinkByCode :one
+SELECT
+  id,
+  original_url,
+  short_name,
+  short_url,
+  created_at
+FROM links
+WHERE short_name = $1;
 
 -- name: UpdateLink :one
 UPDATE links

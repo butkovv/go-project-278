@@ -10,7 +10,7 @@ import (
 )
 
 type Config struct {
-	AppHost     string `env:"APP_HOST" envDefault:"localhost"`
+	AppHost     string `env:"APP_HOST" envDefault:"http://localhost:8080"`
 	AppPort     string `env:"APP_PORT" envDefault:"8080"`
 	DatabaseUrl string `env:"DATABASE_URL,required"`
 }

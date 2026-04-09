@@ -14,7 +14,6 @@ import (
 
 func SetupRouter(database *sql.DB) *gin.Engine {
 	queries := db.New(database)
-	h := NewLinksHandler(queries)
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
@@ -56,11 +55,21 @@ func SetupRouter(database *sql.DB) *gin.Engine {
 			"id":    rid,
 		})
 	}))
+	linksHandler := NewLinksHandler(queries)
+	linkVisitsHandler := NewLinkVisitsHandler(queries)
+	redirectHandler := NewRedirectHandler(queries)
 
 	api := r.Group("/api")
-	//h.Register(api)
-	links := api.Group("links")
-	h.Register(links)
+	links := api.Group("/links")
+	linkVisits := api.Group("/link_visits")
+
+	linksHandler.Register(links)
+	linkVisitsHandler.Register(linkVisits)
+
+	redirect := r.Group("/r")
+	redirectHandler.Register(redirect)
+
+	r.TrustedPlatform = gin.PlatformCloudflare
 
 	return r
 }

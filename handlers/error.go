@@ -45,7 +45,7 @@ func notFound(c *gin.Context) {
 func internalServerError(c *gin.Context, err error) {
 	c.JSON(http.StatusInternalServerError, gin.H{
 		"error":   "Internal Server Error",
-		"message": "Something went wrong",
+		"message": err.Error(),
 	})
 }
 

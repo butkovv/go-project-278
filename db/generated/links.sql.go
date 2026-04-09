@@ -44,41 +44,60 @@ func (q *Queries) DeleteLink(ctx context.Context, id int64) error {
 	return err
 }
 
-const getLinkById = `-- name: GetLinkById :one
+const getLinkByCode = `-- name: GetLinkByCode :one
 SELECT
   id,
   original_url,
   short_name,
-  short_url
+  short_url,
+  created_at
 FROM links
-WHERE id = $1
+WHERE short_name = $1
 `
 
-type GetLinkByIdRow struct {
-	ID          int64  `json:"id"`
-	OriginalUrl string `json:"original_url"`
-	ShortName   string `json:"short_name"`
-	ShortUrl    string `json:"short_url"`
-}
-
-func (q *Queries) GetLinkById(ctx context.Context, id int64) (GetLinkByIdRow, error) {
-	row := q.db.QueryRowContext(ctx, getLinkById, id)
-	var i GetLinkByIdRow
+func (q *Queries) GetLinkByCode(ctx context.Context, shortName string) (Link, error) {
+	row := q.db.QueryRowContext(ctx, getLinkByCode, shortName)
+	var i Link
 	err := row.Scan(
 		&i.ID,
 		&i.OriginalUrl,
 		&i.ShortName,
 		&i.ShortUrl,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const getTotalCount = `-- name: GetTotalCount :one
+const getLinkById = `-- name: GetLinkById :one
+SELECT
+  id,
+  original_url,
+  short_name,
+  short_url,
+  created_at
+FROM links
+WHERE id = $1
+`
+
+func (q *Queries) GetLinkById(ctx context.Context, id int64) (Link, error) {
+	row := q.db.QueryRowContext(ctx, getLinkById, id)
+	var i Link
+	err := row.Scan(
+		&i.ID,
+		&i.OriginalUrl,
+		&i.ShortName,
+		&i.ShortUrl,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTotalLinkCount = `-- name: GetTotalLinkCount :one
 SELECT count(*) AS total_count FROM links
 `
 
-func (q *Queries) GetTotalCount(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getTotalCount)
+func (q *Queries) GetTotalLinkCount(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getTotalLinkCount)
 	var total_count int64
 	err := row.Scan(&total_count)
 	return total_count, err
