@@ -6,13 +6,13 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var (
 	ErrorInvalidID   = errors.New("invalid id")
 	ErrorURLEmpty    = errors.New("url cannot be empty")
 	ErrorNameTooLong = errors.New("name is too long")
-	ErrorLinkExists  = errors.New("link already exists")
 )
 
 func handleDBError(c *gin.Context, err error) {
@@ -25,6 +25,16 @@ func handleDBError(c *gin.Context, err error) {
 		return
 	}
 
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		field := "request"
+		if pgErr.ConstraintName == "links_short_name_key" {
+			field = "short_name"
+		}
+		validationErrors(c, map[string]string{field: "has already been taken"})
+		return
+	}
+
 	internalServerError(c, err)
 }
 
@@ -32,6 +42,18 @@ func badRequest(c *gin.Context, err error) {
 	c.JSON(http.StatusBadRequest, gin.H{
 		"error":   "Bad Request",
 		"message": err.Error(),
+	})
+}
+
+func invalidRequest(c *gin.Context) {
+	c.JSON(http.StatusBadRequest, gin.H{
+		"error": "invalid request",
+	})
+}
+
+func validationErrors(c *gin.Context, fieldErrors map[string]string) {
+	c.JSON(http.StatusUnprocessableEntity, gin.H{
+		"errors": fieldErrors,
 	})
 }
 

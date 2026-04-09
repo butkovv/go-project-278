@@ -1,11 +1,16 @@
 package handlers
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 	"url-shortener/config"
 	db "url-shortener/db/generated"
 
@@ -14,8 +19,8 @@ import (
 )
 
 type LinkParams struct {
-	OriginalUrl string `json:"original_url" binding:"required,url,max=2048"`
-	ShortName   string `json:"short_name" binding:"max=255"`
+	OriginalUrl string `json:"original_url"`
+	ShortName   string `json:"short_name"`
 }
 
 type LinkHandler struct {
@@ -47,8 +52,7 @@ func (h *LinkHandler) Create(c *gin.Context) {
 	}
 	params.OriginalUrl = input.OriginalUrl
 	params.ShortName = input.ShortName
-	params.ShortUrl = fmt.Sprintf("%sr/%s", cfg.AppHost, params.ShortName)
-	fmt.Print(params)
+	params.ShortUrl = fmt.Sprintf("%s/r/%s", strings.TrimRight(cfg.AppHost, "/"), params.ShortName)
 	link, err := h.Queries.CreateLink(c, params)
 	if err != nil {
 		handleDBError(c, err)
@@ -114,10 +118,11 @@ func (h *LinkHandler) Update(c *gin.Context) {
 	params.ID = id
 	params.OriginalUrl = input.OriginalUrl
 	params.ShortName = input.ShortName
-	params.ShortUrl = fmt.Sprintf("%sr/%s", cfg.AppHost, params.ShortName)
+	params.ShortUrl = fmt.Sprintf("%s/r/%s", strings.TrimRight(cfg.AppHost, "/"), params.ShortName)
 	link, err := h.Queries.UpdateLink(c, params)
 	if err != nil {
 		handleDBError(c, err)
+		return
 	}
 	c.JSON(http.StatusOK, link)
 }
@@ -131,6 +136,7 @@ func (h *LinkHandler) Delete(c *gin.Context) {
 	err = h.Queries.DeleteLink(c, id)
 	if err != nil {
 		handleDBError(c, err)
+		return
 	}
 	c.Status(http.StatusNoContent)
 }
@@ -140,16 +146,45 @@ func (h *LinkHandler) parseAndValidateParams(c *gin.Context) (LinkParams, bool) 
 
 	err := c.ShouldBindJSON(&params)
 	if err != nil {
-		badRequest(c, err)
+		var syntaxErr *json.SyntaxError
+		var unmarshalTypeErr *json.UnmarshalTypeError
+		switch {
+		case errors.As(err, &syntaxErr), errors.As(err, &unmarshalTypeErr), errors.Is(err, io.EOF):
+			invalidRequest(c)
+		default:
+			validationErrors(c, map[string]string{"request": "is invalid"})
+		}
 		return params, false
 	}
 
 	params.OriginalUrl = strings.TrimSpace(params.OriginalUrl)
-	if len(params.OriginalUrl) == 0 {
-		badRequest(c, ErrorURLEmpty)
+	params.ShortName = strings.TrimSpace(params.ShortName)
+
+	fieldErrors := map[string]string{}
+	if params.OriginalUrl == "" {
+		fieldErrors["original_url"] = "is required"
+	} else {
+		parsed, parseErr := url.ParseRequestURI(params.OriginalUrl)
+		if parseErr != nil || parsed.Scheme == "" || parsed.Host == "" {
+			fieldErrors["original_url"] = "must be a valid URL"
+		}
+	}
+
+	if params.ShortName != "" {
+		length := utf8.RuneCountInString(params.ShortName)
+		if length < 3 {
+			fieldErrors["short_name"] = "must be at least 3 characters"
+		}
+		if length > 32 {
+			fieldErrors["short_name"] = "must be at most 32 characters"
+		}
+	}
+
+	if len(fieldErrors) > 0 {
+		validationErrors(c, fieldErrors)
 		return params, false
 	}
-	params.ShortName = strings.TrimSpace(params.ShortName)
+
 	if len(params.ShortName) == 0 {
 		params.ShortName = namesgenerator.GetRandomName(0)
 	}

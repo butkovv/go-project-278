@@ -3,16 +3,35 @@ package handlers
 import (
 	"bytes"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 	db "url-shortener/db/generated"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+type nonEmptyStringArg struct{}
+
+func (a nonEmptyStringArg) Match(v driver.Value) bool {
+	s, ok := v.(string)
+	return ok && strings.TrimSpace(s) != ""
+}
+
+type stringPrefixArg struct {
+	prefix string
+}
+
+func (a stringPrefixArg) Match(v driver.Value) bool {
+	s, ok := v.(string)
+	return ok && strings.HasPrefix(s, a.prefix)
+}
 
 func assertJSONFields(t *testing.T, body string, expected map[string]any) {
 	t.Helper()
@@ -26,6 +45,46 @@ func assertJSONFields(t *testing.T, body string, expected map[string]any) {
 		if payload[key] != value {
 			t.Fatalf("expected %s %v, got %v", key, value, payload[key])
 		}
+	}
+}
+
+func assertValidationFieldError(t *testing.T, body, field, message string) {
+	t.Helper()
+
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		t.Fatalf("failed to decode response body: %v", err)
+	}
+
+	errorsMap, ok := payload["errors"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected errors object, got %T", payload["errors"])
+	}
+
+	if errorsMap[field] != message {
+		t.Fatalf("expected errors[%s] = %q, got %v", field, message, errorsMap[field])
+	}
+}
+
+func assertCreatedAtPresent(t *testing.T, payload map[string]any) {
+	t.Helper()
+
+	createdAt, ok := payload["created_at"]
+	if !ok {
+		t.Fatal("expected created_at field in response")
+	}
+
+	switch v := createdAt.(type) {
+	case string:
+		if strings.TrimSpace(v) == "" {
+			t.Fatalf("expected non-empty created_at string, got %q", v)
+		}
+	case map[string]any:
+		if v["Valid"] != true {
+			t.Fatalf("expected created_at.Valid true, got %v", v["Valid"])
+		}
+	default:
+		t.Fatalf("expected created_at string or object, got %T", createdAt)
 	}
 }
 
@@ -69,9 +128,9 @@ func TestCreateLink(t *testing.T) {
 			expectedStatus: http.StatusCreated,
 			setup: func(mock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
-					AddRow(int64(1), "https://example.com", "hexlet", "https://short.local/hexlet", time.Now())
+					AddRow(int64(1), "https://example.com", "hexlet", "https://short.local/r/hexlet", time.Now())
 				mock.ExpectQuery("INSERT INTO links").
-					WithArgs("https://example.com", "hexlet", "https://short.local/hexlet").
+					WithArgs("https://example.com", "hexlet", "https://short.local/r/hexlet").
 					WillReturnRows(rows)
 			},
 			assertBody: func(t *testing.T, body string) {
@@ -89,25 +148,98 @@ func TestCreateLink(t *testing.T) {
 				if payload["short_name"] != "hexlet" {
 					t.Fatalf("expected short_name hexlet, got %v", payload["short_name"])
 				}
-				if payload["short_url"] != "https://short.local/hexlet" {
-					t.Fatalf("expected short_url https://short.local/hexlet, got %v", payload["short_url"])
+				if payload["short_url"] != "https://short.local/r/hexlet" {
+					t.Fatalf("expected short_url https://short.local/r/hexlet, got %v", payload["short_url"])
 				}
+				assertCreatedAtPresent(t, payload)
+			},
+		},
+		{
+			name:           "create link generates short_name when omitted",
+			body:           `{"original_url":"https://example.com"}`,
+			expectedStatus: http.StatusCreated,
+			setup: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
+					AddRow(int64(2), "https://example.com", "generated-name", "https://short.local/r/generated-name", time.Now())
+				mock.ExpectQuery("INSERT INTO links").
+					WithArgs("https://example.com", nonEmptyStringArg{}, stringPrefixArg{prefix: "https://short.local/r/"}).
+					WillReturnRows(rows)
+			},
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				payload := map[string]any{}
+				if err := json.Unmarshal([]byte(body), &payload); err != nil {
+					t.Fatalf("failed to decode response body: %v", err)
+				}
+				shortName, ok := payload["short_name"].(string)
+				if !ok || strings.TrimSpace(shortName) == "" {
+					t.Fatalf("expected generated non-empty short_name, got %v", payload["short_name"])
+				}
+				shortURL, ok := payload["short_url"].(string)
+				if !ok || !strings.HasSuffix(shortURL, "/r/"+shortName) {
+					t.Fatalf("expected short_url to end with /r/%s, got %v", shortName, payload["short_url"])
+				}
+				assertCreatedAtPresent(t, payload)
 			},
 		},
 		{
 			name:           "create link invalid json",
 			body:           `{"original_url":}`,
 			expectedStatus: http.StatusBadRequest,
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertJSONFields(t, body, map[string]any{"error": "invalid request"})
+			},
 		},
 		{
 			name:           "create link missing original_url",
 			body:           `{"short_name":"hexlet"}`,
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusUnprocessableEntity,
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertValidationFieldError(t, body, "original_url", "is required")
+			},
 		},
 		{
 			name:           "create link invalid url",
 			body:           `{"original_url":"bad-url","short_name":"hexlet"}`,
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusUnprocessableEntity,
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertValidationFieldError(t, body, "original_url", "must be a valid URL")
+			},
+		},
+		{
+			name:           "create link short_name too short",
+			body:           `{"original_url":"https://example.com","short_name":"ab"}`,
+			expectedStatus: http.StatusUnprocessableEntity,
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertValidationFieldError(t, body, "short_name", "must be at least 3 characters")
+			},
+		},
+		{
+			name:           "create link short_name too long",
+			body:           `{"original_url":"https://example.com","short_name":"abcdefghijklmnopqrstuvwxyz1234567"}`,
+			expectedStatus: http.StatusUnprocessableEntity,
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertValidationFieldError(t, body, "short_name", "must be at most 32 characters")
+			},
+		},
+		{
+			name:           "create link duplicate short_name",
+			body:           `{"original_url":"https://example.com","short_name":"hexlet"}`,
+			expectedStatus: http.StatusUnprocessableEntity,
+			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery("INSERT INTO links").
+					WithArgs("https://example.com", "hexlet", "https://short.local/r/hexlet").
+					WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "links_short_name_key"})
+			},
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertValidationFieldError(t, body, "short_name", "has already been taken")
+			},
 		},
 	}
 
@@ -152,8 +284,8 @@ func TestGetLink(t *testing.T) {
 			url:            "/api/links/1",
 			expectedStatus: http.StatusOK,
 			setup: func(mock sqlmock.Sqlmock) {
-				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url"}).
-					AddRow(int64(1), "https://example.com", "hexlet", "https://short.local/hexlet")
+				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
+					AddRow(int64(1), "https://example.com", "hexlet", "https://short.local/r/hexlet", time.Now())
 				mock.ExpectQuery("SELECT(.*)FROM links").WithArgs(int64(1)).WillReturnRows(rows)
 			},
 			assertBody: func(t *testing.T, body string) {
@@ -162,7 +294,7 @@ func TestGetLink(t *testing.T) {
 					"id":           float64(1),
 					"original_url": "https://example.com",
 					"short_name":   "hexlet",
-					"short_url":    "https://short.local/hexlet",
+					"short_url":    "https://short.local/r/hexlet",
 				})
 			},
 		},
@@ -246,8 +378,8 @@ func TestListLinks(t *testing.T) {
 			expectedRange:  "links 0-2/2",
 			setup: func(mock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
-					AddRow(int64(2), "https://b.example", "b", "https://short.local/b", time.Now()).
-					AddRow(int64(1), "https://a.example", "a", "https://short.local/a", time.Now())
+					AddRow(int64(2), "https://b.example", "b", "https://short.local/r/b", time.Now()).
+					AddRow(int64(1), "https://a.example", "a", "https://short.local/r/a", time.Now())
 				mock.ExpectQuery("SELECT(.*)FROM links").WithArgs(int32(10), int32(0)).WillReturnRows(rows)
 				mock.ExpectQuery(`SELECT count\(\*\) AS total_count FROM links`).WillReturnRows(sqlmock.NewRows([]string{"total_count"}).AddRow(int64(2)))
 			},
@@ -275,8 +407,8 @@ func TestListLinks(t *testing.T) {
 			expectedRange:  "links 1-3/5",
 			setup: func(mock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
-					AddRow(int64(4), "https://d.example", "d", "https://short.local/d", time.Now()).
-					AddRow(int64(3), "https://c.example", "c", "https://short.local/c", time.Now())
+					AddRow(int64(4), "https://d.example", "d", "https://short.local/r/d", time.Now()).
+					AddRow(int64(3), "https://c.example", "c", "https://short.local/r/c", time.Now())
 				mock.ExpectQuery("SELECT(.*)FROM links").WithArgs(int32(2), int32(1)).WillReturnRows(rows)
 				mock.ExpectQuery(`SELECT count\(\*\) AS total_count FROM links`).WillReturnRows(sqlmock.NewRows([]string{"total_count"}).AddRow(int64(5)))
 			},
@@ -341,9 +473,9 @@ func TestUpdateLink(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			setup: func(mock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{"id", "original_url", "short_name", "short_url", "created_at"}).
-					AddRow(int64(1), "https://example.com/new", "new", "https://short.local/new", time.Now())
+					AddRow(int64(1), "https://example.com/new", "new", "https://short.local/r/new", time.Now())
 				mock.ExpectQuery("UPDATE links").
-					WithArgs(int64(1), "https://example.com/new", "new", "https://short.local/new").
+					WithArgs(int64(1), "https://example.com/new", "new", "https://short.local/r/new").
 					WillReturnRows(rows)
 			},
 			assertBody: func(t *testing.T, body string) {
@@ -352,7 +484,7 @@ func TestUpdateLink(t *testing.T) {
 					"id":           float64(1),
 					"original_url": "https://example.com/new",
 					"short_name":   "new",
-					"short_url":    "https://short.local/new",
+					"short_url":    "https://short.local/r/new",
 				})
 			},
 		},
@@ -367,6 +499,50 @@ func TestUpdateLink(t *testing.T) {
 			url:            "/api/links/1",
 			body:           `{"original_url":}`,
 			expectedStatus: http.StatusBadRequest,
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertJSONFields(t, body, map[string]any{"error": "invalid request"})
+			},
+		},
+		{
+			name:           "update link missing original_url",
+			url:            "/api/links/1",
+			body:           `{"short_name":"new"}`,
+			expectedStatus: http.StatusUnprocessableEntity,
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertValidationFieldError(t, body, "original_url", "is required")
+			},
+		},
+		{
+			name:           "update link invalid url",
+			url:            "/api/links/1",
+			body:           `{"original_url":"bad-url","short_name":"new"}`,
+			expectedStatus: http.StatusUnprocessableEntity,
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertValidationFieldError(t, body, "original_url", "must be a valid URL")
+			},
+		},
+		{
+			name:           "update link short_name too short",
+			url:            "/api/links/1",
+			body:           `{"original_url":"https://example.com/new","short_name":"ab"}`,
+			expectedStatus: http.StatusUnprocessableEntity,
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertValidationFieldError(t, body, "short_name", "must be at least 3 characters")
+			},
+		},
+		{
+			name:           "update link short_name too long",
+			url:            "/api/links/1",
+			body:           `{"original_url":"https://example.com/new","short_name":"abcdefghijklmnopqrstuvwxyz1234567"}`,
+			expectedStatus: http.StatusUnprocessableEntity,
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertValidationFieldError(t, body, "short_name", "must be at most 32 characters")
+			},
 		},
 		{
 			name:           "update link not found",
@@ -375,8 +551,23 @@ func TestUpdateLink(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 			setup: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("UPDATE links").
-					WithArgs(int64(999), "https://example.com/new", "new", "https://short.local/new").
+					WithArgs(int64(999), "https://example.com/new", "new", "https://short.local/r/new").
 					WillReturnError(sql.ErrNoRows)
+			},
+		},
+		{
+			name:           "update link duplicate short_name",
+			url:            "/api/links/1",
+			body:           `{"original_url":"https://example.com/new","short_name":"new"}`,
+			expectedStatus: http.StatusUnprocessableEntity,
+			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery("UPDATE links").
+					WithArgs(int64(1), "https://example.com/new", "new", "https://short.local/r/new").
+					WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "links_short_name_key"})
+			},
+			assertBody: func(t *testing.T, body string) {
+				t.Helper()
+				assertValidationFieldError(t, body, "short_name", "has already been taken")
 			},
 		},
 	}
