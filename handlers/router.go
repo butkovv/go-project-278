@@ -27,10 +27,17 @@ func SetupRouter(database *sql.DB) *gin.Engine {
 		if rid == "" {
 			rid = uuid.New().String()
 		}
-		c.Header("X-Reques-ID", rid)
+		c.Header("X-Request-ID", rid)
 
 		c.Set("request_id", rid)
 
+		slog.Info("proxy headers",
+			"cf_connecting_ip", c.GetHeader("CF-Connecting-IP"),
+			"x_forwarded_for", c.GetHeader("X-Forwarded-For"),
+			"x_real_ip", c.GetHeader("X-Real-IP"),
+			"remote_addr", c.Request.RemoteAddr,
+			"client_ip", c.ClientIP(),
+		)
 		c.Next()
 		slog.Info("request handled",
 			"method", c.Request.Method,
