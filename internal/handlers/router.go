@@ -55,6 +55,11 @@ func SetupRouter(database *sql.DB) *gin.Engine {
 			"id":    rid,
 		})
 	}))
+
+	r.GET("/ping", func(c *gin.Context) {
+		c.String(http.StatusOK, "pong")
+	})
+
 	linksHandler := NewLinksHandler(queries)
 	linkVisitsHandler := NewLinkVisitsHandler(queries)
 	redirectHandler := NewRedirectHandler(queries)
