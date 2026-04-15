@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 	"time"
-	db "url-shortener/db/generated"
+	db "url-shortener/internal/db/generated"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

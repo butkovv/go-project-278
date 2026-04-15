@@ -2,10 +2,10 @@ version: "2"
 sql:
   - engine: "postgresql"
     queries: "db/queries"
-    schema: "db/migrations"
+    schema: "internal/migrations/sql"
     gen:
       go:
         package: "db"
-        out: "db/generated"
+        out: "internal/db/generated"
         emit_json_tags: true
         emit_interface: true

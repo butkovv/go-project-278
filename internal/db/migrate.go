@@ -3,7 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"url-shortener/config"
+	"url-shortener/internal/config"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -11,7 +11,7 @@ import (
 
 const (
 	DefaultDatabaseURL   = "postgres://test:test@localhost:5432/usdb?sslmode=disable"
-	DefaultMigrationsDir = "db/migrations"
+	DefaultMigrationsDir = "internal/migrations/sql"
 )
 
 type MigrationOptions struct {

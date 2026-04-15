@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	db "url-shortener/db/generated"
+	db "url-shortener/internal/db/generated"
 
 	"github.com/gin-gonic/gin"
 )

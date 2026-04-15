@@ -3,7 +3,7 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
-	db "url-shortener/db/generated"
+	db "url-shortener/internal/db/generated"
 
 	"github.com/gin-gonic/gin"
 )

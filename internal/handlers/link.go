@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-	"url-shortener/config"
-	db "url-shortener/db/generated"
+	"url-shortener/internal/config"
+	db "url-shortener/internal/db/generated"
 
 	"github.com/docker/docker/pkg/namesgenerator"
 	"github.com/gin-gonic/gin"

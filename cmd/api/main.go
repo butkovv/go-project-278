@@ -4,10 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	migrations "url-shortener"
-	"url-shortener/config"
-	"url-shortener/db"
-	"url-shortener/handlers"
+	"url-shortener/internal/config"
+	"url-shortener/internal/db"
+	"url-shortener/internal/handlers"
+	migrations "url-shortener/internal/migrations"
 
 	"github.com/pressly/goose/v3"
 )
@@ -45,7 +45,7 @@ func main() {
 
 	goose.SetBaseFS(migrations.EmbedMigrations)
 
-	err = goose.Up(pool, "db/migrations")
+	err = goose.Up(pool, "sql")
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
