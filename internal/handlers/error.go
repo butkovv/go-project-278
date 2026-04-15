@@ -10,9 +10,10 @@ import (
 )
 
 var (
-	ErrorInvalidID   = errors.New("invalid id")
-	ErrorURLEmpty    = errors.New("url cannot be empty")
-	ErrorNameTooLong = errors.New("name is too long")
+	ErrorInvalidID    = errors.New("invalid id")
+	ErrorInvalidRange = errors.New("invalid range")
+	ErrorURLEmpty     = errors.New("url cannot be empty")
+	ErrorNameTooLong  = errors.New("name is too long")
 )
 
 func handleDBError(c *gin.Context, err error) {

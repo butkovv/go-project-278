@@ -23,7 +23,11 @@ func (h *LinkVisitHandler) Register(rg *gin.RouterGroup) {
 }
 
 func (h *LinkVisitHandler) List(c *gin.Context) {
-	pagination := h.getPaginationParams(c)
+	pagination, err := h.getPaginationParams(c)
+	if err != nil {
+		badRequest(c, err)
+		return
+	}
 	linkVisits, err := h.Queries.ListLinkVisits(c, pagination)
 	if err != nil {
 		handleDBError(c, err)
@@ -43,24 +47,35 @@ func (h *LinkVisitHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, linkVisits)
 }
 
-func (h *LinkVisitHandler) getPaginationParams(c *gin.Context) db.ListLinkVisitsParams {
+func (h *LinkVisitHandler) getPaginationParams(c *gin.Context) (db.ListLinkVisitsParams, error) {
 	pagination := db.ListLinkVisitsParams{Offset: 0, Limit: 10}
 	rangeString := c.DefaultQuery("range", "")
+	if strings.TrimSpace(rangeString) == "" {
+		return pagination, nil
+	}
+
 	trimmedRangeString := strings.Trim(rangeString, "[]")
 	parts := strings.Split(trimmedRangeString, ",")
 	if len(parts) == 2 {
-		start, err := strconv.Atoi(parts[0])
+		start, err := strconv.Atoi(strings.TrimSpace(parts[0]))
 		if err != nil {
-			handleDBError(c, err)
-			return pagination
+			return pagination, ErrorInvalidRange
 		}
-		end, err := strconv.Atoi(parts[1])
+		end, err := strconv.Atoi(strings.TrimSpace(parts[1]))
 		if err != nil {
-			handleDBError(c, err)
-			return pagination
+			return pagination, ErrorInvalidRange
+		}
+		if start < 0 || end < start {
+			return pagination, ErrorInvalidRange
 		}
 		pagination.Offset = int32(start)
 		pagination.Limit = int32(end - start)
+		return pagination, nil
 	}
-	return pagination
+
+	if trimmedRangeString != "" {
+		return pagination, ErrorInvalidRange
+	}
+
+	return pagination, nil
 }
