@@ -11,7 +11,7 @@ import (
 
 const (
 	DefaultDatabaseURL   = "postgres://test:test@localhost:5432/usdb?sslmode=disable"
-	DefaultMigrationsDir = "internal/migrations/sql"
+	DefaultMigrationsDir = "db/migrations"
 )
 
 type MigrationOptions struct {

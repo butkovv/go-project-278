@@ -35,7 +35,7 @@ COPY --from=frontend-builder \
   /build/frontend/node_modules/@hexlet/project-url-shortener-frontend/dist \
   /app/public
 
-COPY --from=backend-builder build/code/internal/migrations/sql /app/internal/migrations/sql
+COPY --from=backend-builder build/code/db/migrations /app/db/migrations
 COPY --from=backend-builder /go/bin/goose /usr/local/bin/goose
 
 COPY bin/run.sh /app/bin/run.sh
